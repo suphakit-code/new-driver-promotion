@@ -1,0 +1,217 @@
+DROP TEMPORARY TABLE motor_driver ;
+CREATE TEMPORARY TABLE motor_driver
+SELECT p.promo_id,
+	ROW_NUMBER() OVER(PARTITION BY d.skootar_id ORDER BY p.promo_id) AS promo_num,
+	d.id,
+	date(DATE_ADD(f.first_order_date,INTERVAL 30 DAY)) AS end_promo_date,
+	p.promo_type,
+	d.skootar_id,
+	ev.evidence_status,
+	if(ev.evidence_status =1,'ส่งครบและอนุมัติแล้ว', if(ev.evidence_status =9, 'ยังส่งไม่ครบ', 'ยังส่งไม่ครบ หรือรออนุมัติ') ) AS status_doc,
+	date(f.first_order_date) AS first_order_date,
+	if(ev.evidence_status =1,'', date(DATE_ADD(f.first_order_date,INTERVAL 30 DAY))) AS expired_send_doc_date,
+	if(CURRENT_DATE() BETWEEN d.start_datetime AND d.end_datetime , 	ROW_NUMBER() OVER(PARTITION BY d.skootar_id ORDER BY p.promo_id),NULL) AS current_stage,
+	if(CURRENT_DATE() BETWEEN d.start_datetime AND d.end_datetime , 	 CONCAT(DATE_FORMAT(d.start_datetime, '%d/%m'), ' - ', DATE_FORMAT(d.end_datetime, '%d/%m'))   ,NULL) AS current_duration,
+	COUNT(if(CURRENT_DATE() BETWEEN d.start_datetime AND d.end_datetime AND j.job_status >=9,j.job_id,NULL)) AS current_job,
+	round(if(COUNT(if(CURRENT_DATE() BETWEEN d.start_datetime AND d.end_datetime AND j.job_status >=9,j.job_id,NULL)) >=p.min_count_job,p.bonus_amount,0),0) AS current_bonus,
+	
+	d.start_datetime,
+	d.end_datetime,
+	p.min_count_job,
+	p.bonus_amount,
+	COUNT(if(j.job_status>=9,j.job_id,NULL)) AS total_order,
+	COUNT(distinct if(j.job_status>=9,j.created_by,NULL)) AS total_user,
+	round(if(COUNT(if(j.job_status>=9,j.job_id,NULL)) >=p.min_count_job,p.bonus_amount,0),0) AS total_bonus,
+	SUM(m.pay_skootar) AS pay_skootar,
+	d.bonus_status
+FROM tbl_driver_promotion p LEFT JOIN tbl_driver_promotion_detail d ON p.promo_id = d.promo_id
+	LEFT JOIN tbl_job j ON d.skootar_id = j.stootar_id
+			AND j.date_src BETWEEN d.start_datetime AND d.end_datetime
+	LEFT JOIN tbl_mission m ON j.mission_id = m.mission_id
+   LEFT JOIN tbl_skootar_evidence ev ON d.skootar_id = ev.skootar_id
+   LEFT JOIN tbl_driver_first_order f ON d.skootar_id = f.skootar_id
+   LEFT JOIN tbl_skootar s ON d.skootar_id = s.skootar_id
+   
+WHERE p.start_date >= DATE_FORMAT(DATE_SUB(CURRENT_DATE(),INTERVAL 1 MONTH),'%Y-%m-%01 00:00:00') 
+	AND p.start_date < DATE_FORMAT(date_add(LAST_DAY(DATE_SUB(CURRENT_DATE(),INTERVAL 1 MONTH)) ,INTERVAL 1 DAY),'%Y-%m-%d 00:00:00')
+	AND p.promo_type LIKE '%new_driver%'
+	AND p.vehicle_type ='motorcycle'
+	AND s.`status` >-1
+GROUP BY p.promo_id,d.skootar_id;
+
+SELECT *
+FROM motor_driver;
+
+SELECT m.promo_id,
+	m.skootar_id,
+	m.evidence_status,
+	 CONCAT_WS('',
+    	CONCAT('update tbl_driver_promotion_detail set total_count_job = ',m.promo_id,', '),
+    	CONCAT('total_user = ',m.total_user ,', '),
+    	CONCAT('total_pay_skootar = ',m.pay_skootar ,', '),
+    	CONCAT('result_bonus = ',m.total_bonus,', '),
+    	CONCAT('bonus_status = 0'),
+    	CONCAT(' where skootar_id =\'',m.skootar_id,'\' and promo_id =',m.promo_id,';')) AS update_promo,
+   m.end_promo_date
+FROM motor_driver m
+WHERE m.evidence_status =10
+	AND m.bonus_status =1
+	AND m.expired_send_doc_date < CURRENT_DATE()
+	AND m.end_promo_date < CURRENT_DATE() ;
+
+-- add bonus
+
+SELECT m.promo_id,
+	'Bonus' AS trans_type,
+	 CONCAT (m.id ,' โปรฯยิ่งวิ่งยิ่งได้โบนัส 5 ต่อ วันที่ ', m.first_order_date,' ถึง ', m.end_datetime,
+	  ' ต่อที่',m.promo_num,' วิ่งไป ',m.total_order, ' งาน ได้โบนัส ',m.total_bonus ,' บาท') AS description,
+    m.skootar_id, 
+    '' AS mission_id,
+    if(m.promo_num<=5,m.total_bonus,0) AS adjust_deposit,
+    0,
+    0,
+    0,
+    'Top' AS added_by,
+	 CONCAT_WS('',
+    	CONCAT('update tbl_driver_promotion_detail set total_count_job = ',m.promo_id,', '),
+    	CONCAT('total_user = ',m.total_user ,', '),
+    	CONCAT('total_pay_skootar = ',m.pay_skootar ,', '),
+    	CONCAT('result_bonus = ',if(m.promo_num<=5,m.total_bonus,0),', '),
+    	CONCAT('bonus_status = ',if(m.total_bonus >0,2,0)),
+    	CONCAT(' where skootar_id =\'',m.skootar_id,'\' and promo_id =',m.promo_id,';')) AS update_promo,
+   m.end_promo_date
+FROM motor_driver m
+WHERE m.bonus_status =1 
+		AND m.evidence_status =1
+	AND m.end_promo_date < CURRENT_DATE() ;
+
+
+SELECT m.skootar_id,
+	s.onesignal_id,
+	'📣สรุปการวิ่งงาน โปรโมชั่นยิ่งวิ่ง ยิ่งได้ เฉพาะคุณ🏍️' AS heading_en,
+   '📣สรุปการวิ่งงาน โปรโมชั่นยิ่งวิ่ง ยิ่งได้ เฉพาะคุณ🏍️' AS heading_th,
+   
+'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_th,
+	'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_en,
+
+
+	CONCAT('พี่',s.first_name,' วันที่ ',m.first_order_date,' ถึง ',MAX(CASE WHEN m.promo_num = 5 THEN date(m.end_datetime) END) ,
+	  '<br/>ต่อที่ 1 วิ่งไป ',MAX(CASE WHEN m.promo_num = 1 THEN m.total_order END), ' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 1 THEN m.total_bonus END) ,' บาท', 
+	  '<br/>ต่อที่ 2 วิ่งไป ',MAX(CASE WHEN m.promo_num = 2 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 2 THEN m.total_bonus END) ,' บาท',
+	  '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END) ,' บาท',
+      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
+      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
+	  '<br/>รวมได้ทั้งหมด ', SUM(m.total_bonus),' บาท'
+	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_th,
+	  
+	  
+	CONCAT('พี่',s.first_name,' วันที่ ',m.first_order_date,' ถึง ',MAX(CASE WHEN m.promo_num = 5 THEN date(m.end_datetime) END) ,
+	  '<br/>ต่อที่ 1 วิ่งไป ',MAX(CASE WHEN m.promo_num = 1 THEN m.total_order END), ' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 1 THEN m.total_bonus END) ,' บาท', 
+	  '<br/>ต่อที่ 2 วิ่งไป ',MAX(CASE WHEN m.promo_num = 2 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 2 THEN m.total_bonus END) ,' บาท',
+	  '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END) ,' บาท',
+      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
+      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
+	  '<br/>รวมได้ทั้งหมด ', SUM(m.total_bonus),' บาท'
+	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_en,
+   
+   'https://storage.googleapis.com/skootar-project.appspot.com/mkt/New Drivers Dec 2025 Motor_150.png' AS thumbnail_th,
+   'https://storage.googleapis.com/skootar-project.appspot.com/mkt/New Drivers Dec 2025 Motor_150.png' AS thumbnail_en,
+   
+   '' AS url,
+		  
+
+    	 TRUE as display_in_news,
+       date_format(current_date, '%Y-%m-%d 23:59:59') AS display_end,
+       FALSE as public_news,
+   	 'news' as news_type
+
+    
+FROM motor_driver m LEFT JOIN tbl_skootar s ON s.skootar_id = m.skootar_id
+WHERE 
+	m.bonus_status = 1
+	AND s.`status` >-1
+GROUP BY m.skootar_id HAVING SUM(m.total_bonus)>0 	AND MAX(CASE WHEN m.promo_num = 5 THEN date(m.end_datetime) END) < CURRENT_DATE() ;
+
+
+-- noti คนได้เสื้อ	
+SELECT 
+	s.skootar_id,
+	s.onesignal_id,
+	'🎉สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ รับฟรีเสื้อ Skootar มูลค่า 500 บาท' AS heading_th,
+	'🎉สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ รับฟรีเสื้อ Skootar มูลค่า 500 บาท' AS heading_en,
+
+
+	CONCAT('พี่',s.first_name,' วันที่ ',m.first_order_date,' ถึง ',MAX(CASE WHEN m.promo_num = 6 THEN date(m.end_datetime) END) ,
+	  '<br/>ภายใน 7 วัน วิ่งไปทั้งหมด ',MAX(CASE WHEN m.promo_num = 6 THEN m.total_order END), ' งาน สามารถเข้ามาติดต่อรับเสื้อ ได้ที่ศูนย์บริการคนขับ อาคารรัชต์ภาคย์ ชั้น 2 ได้เลยค่ะ'
+	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_th,
+	  
+	CONCAT('พี่',s.first_name,' วันที่ ',m.first_order_date,' ถึง ',MAX(CASE WHEN m.promo_num = 6 THEN date(m.end_datetime) END) ,
+	  '<br/>ภายใน 7 วัน วิ่งไปทั้งหมด ',MAX(CASE WHEN m.promo_num = 6 THEN m.total_order END), ' งาน สามารถเข้ามาติดต่อรับเสื้อ ได้ที่ศูนย์บริการคนขับ อาคารรัชต์ภาคย์ ชั้น 2 ได้เลยค่ะ'
+	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i'))  AS contents_en,
+
+   '' AS thumbnail_th,
+   '' AS thumbnail_en,
+   ''AS URL,
+	'TRUE' AS display_in_news,
+	CONCAT( DATE_ADD( CURRENT_DATE(), INTERVAL 14 DAY), ' 23:59:59') AS display_end, 
+   'FALSE' AS public_news,
+   'news' AS news_type
+
+FROM motor_driver m  LEFT JOIN tbl_skootar s ON m.skootar_id = s.skootar_id
+WHERE evidence_status = 1
+GROUP BY m.skootar_id HAVING MAX(CASE WHEN m.promo_num = 6 THEN m.total_bonus END) >0 AND MAX(CASE WHEN m.promo_num = 6 THEN m.bonus_status END) =1 AND  MAX(CASE WHEN m.promo_num = 6 THEN date(m.end_datetime) END) < CURRENT_DATE() ;
+
+
+-- noti คนที่ได้รับกล่อง
+SELECT 
+	s.skootar_id,
+	s.onesignal_id,
+	'🎉สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ รับฟรีกล่อง Skootar มูลค่า 990 บาท' AS heading_th,
+	'🎉สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ รับฟรีกล่อง Skootar มูลค่า 990 บาท' AS heading_en,
+
+
+	CONCAT ('พี่',s.first_name,' วันที่ ',first_order_date,' ถึง ', MAX(CASE WHEN m.promo_num = 7 THEN date(m.end_datetime) END),
+	  '<br/>ภายใน 30 วัน วิ่งไปทั้งหมด ',MAX(CASE WHEN m.promo_num = 7 THEN m.total_order END), ' งาน สามารถเข้ามาติดต่อรับกล่อง ได้ที่ศูนย์บริการคนขับ อาคารรัชต์ภาคย์ ชั้น 2 ได้เลยค่ะ'
+	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_th,
+	  
+	CONCAT ('พี่',s.first_name,' วันที่ ',first_order_date,' ถึง ', MAX(CASE WHEN m.promo_num = 7 THEN date(m.end_datetime) END),
+	  '<br/>ภายใน 30 วัน วิ่งไปทั้งหมด ',MAX(CASE WHEN m.promo_num = 7 THEN m.total_order END), ' งาน สามารถเข้ามาติดต่อรับกล่อง ได้ที่ศูนย์บริการคนขับ อาคารรัชต์ภาคย์ ชั้น 2 ได้เลยค่ะ'
+	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_en,
+
+   '' AS thumbnail_th,
+   '' AS thumbnail_en,
+   ''AS URL,
+	'TRUE' AS display_in_news,
+	CONCAT( DATE_ADD( CURRENT_DATE(), INTERVAL 14 DAY), ' 23:59:59') AS display_end, 
+   'FALSE' AS public_news,
+   'news' AS news_type
+
+FROM motor_driver m  LEFT JOIN tbl_skootar s ON m.skootar_id = s.skootar_id
+WHERE evidence_status = 1
+GROUP BY m.skootar_id HAVING MAX(CASE WHEN m.promo_num = 7 THEN m.total_bonus END) >0 AND MAX(CASE WHEN m.promo_num = 7 THEN m.bonus_status END) =1 AND  MAX(CASE WHEN m.promo_num = 7 THEN date(m.end_datetime) END) < CURRENT_DATE() ;
+
+-- list คนที่ได้เสื้อ
+SELECT 
+	s.skootar_id,
+	s.first_name,
+	s.mobile,
+	first_order_date AS เริ่มวิ่งงานแรกวันที่, 
+	MAX(CASE WHEN m.promo_num = 6 THEN date(m.end_datetime) END) AS วันสิ้นสุดโปรแจกเสื้อ,
+	MAX(CASE WHEN m.promo_num = 6 THEN m.total_order END) AS วิ่งไปทั้งหมด
+
+FROM motor_driver m LEFT JOIN tbl_skootar s ON m.skootar_id = s.skootar_id
+WHERE evidence_status = 1
+GROUP BY m.skootar_id HAVING MAX(CASE WHEN m.promo_num = 6 THEN m.total_bonus END) >0 AND MAX(CASE WHEN m.promo_num = 6 THEN m.bonus_status END) =1 AND  MAX(CASE WHEN m.promo_num = 6 THEN date(m.end_datetime) END) < CURRENT_DATE() ;
+
+-- list คนที่ได้กล่อง
+SELECT 
+	s.skootar_id,
+	s.first_name,
+	s.mobile,
+	first_order_date AS เริ่มวิ่งงานแรกวันที่, 
+	MAX(CASE WHEN m.promo_num = 7 THEN date(m.end_datetime) END) AS วันสิ้นสุดโปรแจกเสื้อ,
+	MAX(CASE WHEN m.promo_num = 7 THEN m.total_order END) AS วิ่งไปทั้งหมด
+
+FROM motor_driver m LEFT JOIN tbl_skootar s ON m.skootar_id = s.skootar_id
+WHERE evidence_status = 1
+GROUP BY m.skootar_id HAVING MAX(CASE WHEN m.promo_num = 7 THEN m.total_bonus END) >0 AND MAX(CASE WHEN m.promo_num = 7 THEN m.bonus_status END) =1 AND  MAX(CASE WHEN m.promo_num = 7 THEN date(m.end_datetime) END) < CURRENT_DATE() ;
