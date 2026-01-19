@@ -1,4 +1,6 @@
 DROP TEMPORARY TABLE motor_driver ;
+
+
 CREATE TEMPORARY TABLE motor_driver
 SELECT p.promo_id,
 	ROW_NUMBER() OVER(PARTITION BY d.skootar_id ORDER BY p.promo_id) AS promo_num,
@@ -39,9 +41,12 @@ WHERE p.start_date >= DATE_FORMAT(DATE_SUB(CURRENT_DATE(),INTERVAL 1 MONTH),'%Y-
 	AND s.`status` >-1
 GROUP BY p.promo_id,d.skootar_id;
 
+
 SELECT *
 FROM motor_driver;
 
+
+-- cut off expired send doc date
 SELECT m.promo_id,
 	m.skootar_id,
 	m.evidence_status,
@@ -59,8 +64,8 @@ WHERE m.evidence_status =10
 	AND m.expired_send_doc_date < CURRENT_DATE()
 	AND m.end_promo_date < CURRENT_DATE() ;
 
--- add bonus
 
+-- add bonus
 SELECT m.promo_id,
 	'Bonus' AS trans_type,
 	 CONCAT (m.id ,' โปรฯยิ่งวิ่งยิ่งได้โบนัส 5 ต่อ วันที่ ', m.first_order_date,' ถึง ', m.end_datetime,
@@ -86,6 +91,7 @@ WHERE m.bonus_status =1
 	AND m.end_promo_date < CURRENT_DATE() ;
 
 
+-- noti add bonus
 SELECT m.skootar_id,
 	s.onesignal_id,
 	'📣สรุปการวิ่งงาน โปรโมชั่นยิ่งวิ่ง ยิ่งได้ เฉพาะคุณ🏍️' AS heading_en,
@@ -190,6 +196,7 @@ FROM motor_driver m  LEFT JOIN tbl_skootar s ON m.skootar_id = s.skootar_id
 WHERE evidence_status = 1
 GROUP BY m.skootar_id HAVING MAX(CASE WHEN m.promo_num = 7 THEN m.total_bonus END) >0 AND MAX(CASE WHEN m.promo_num = 7 THEN m.bonus_status END) =1 AND  MAX(CASE WHEN m.promo_num = 7 THEN date(m.end_datetime) END) < CURRENT_DATE() ;
 
+
 -- list คนที่ได้เสื้อ
 SELECT 
 	s.skootar_id,
@@ -202,6 +209,7 @@ SELECT
 FROM motor_driver m LEFT JOIN tbl_skootar s ON m.skootar_id = s.skootar_id
 WHERE evidence_status = 1
 GROUP BY m.skootar_id HAVING MAX(CASE WHEN m.promo_num = 6 THEN m.total_bonus END) >0 AND MAX(CASE WHEN m.promo_num = 6 THEN m.bonus_status END) =1 AND  MAX(CASE WHEN m.promo_num = 6 THEN date(m.end_datetime) END) < CURRENT_DATE() ;
+
 
 -- list คนที่ได้กล่อง
 SELECT 
