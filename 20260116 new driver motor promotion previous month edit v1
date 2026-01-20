@@ -44,8 +44,7 @@ GROUP BY p.promo_id,d.skootar_id;
 
 
 SELECT *
-FROM motor_driver
-WHERE skootar_id = 'SH1766';
+FROM motor_driver;
 
 
 -- cut off expired send doc date
@@ -93,7 +92,7 @@ WHERE m.bonus_status =1
 	AND m.end_promo_date < CURRENT_DATE() ;
 
 
--- check update drivers promotion detail
+/*-- check update drivers promotion detail
 SELECT *
 -- 	d.promo_id,
 -- 	d.skootar_id,
@@ -117,15 +116,12 @@ FROM tbl_driver_transaction s
 WHERE DATE(s.created_datetime) = CURRENT_DATE()
 AND s.created_by ='Top'
 ORDER BY s.created_datetime DESC
-LIMIT 29;
+LIMIT 29;*/
 
 
 -- noti add bonus
 SELECT m.skootar_id,
 	s.onesignal_id,
-	'📣สรุปการวิ่งงาน โปรโมชั่นยิ่งวิ่ง ยิ่งได้ เฉพาะคุณ🏍️' AS heading_en,
-   '📣สรุปการวิ่งงาน โปรโมชั่นยิ่งวิ่ง ยิ่งได้ เฉพาะคุณ🏍️' AS heading_th,
-   
 	'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_th,
 	'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_en,
 
@@ -136,7 +132,8 @@ SELECT m.skootar_id,
 	  '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END) ,' บาท',
       '<br/>ต่อที่ 4 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
       '<br/>ต่อที่ 5 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
-	  '<br/>รวมได้ทั้งหมด ', SUM(m.total_bonus),' บาท'
+	  '<br/>รวมได้ทั้งหมด ', MAX(CASE WHEN m.promo_num = 1 THEN m.total_bonus END) + MAX(CASE WHEN m.promo_num = 2 THEN m.total_bonus END) + MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END)
+                                      + MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) + MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END),' บาท'
 	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_th,
 	  
 	  
@@ -146,7 +143,8 @@ SELECT m.skootar_id,
 	  '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END) ,' บาท',
       '<br/>ต่อที่ 4 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
       '<br/>ต่อที่ 5 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
-	  '<br/>รวมได้ทั้งหมด ', SUM(m.total_bonus),' บาท'
+	  '<br/>รวมได้ทั้งหมด ', MAX(CASE WHEN m.promo_num = 1 THEN m.total_bonus END) + MAX(CASE WHEN m.promo_num = 2 THEN m.total_bonus END) + MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END)
+                                      + MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) + MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END),' บาท'
 	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_en,
    
    'https://storage.googleapis.com/skootar-project.appspot.com/mkt/New Drivers Dec 2025 Motor_150.png' AS thumbnail_th,
@@ -155,9 +153,9 @@ SELECT m.skootar_id,
    '' AS url,
 		  
 
-    	 TRUE as display_in_news,
+    	 'TRUE' as display_in_news,
        date_format(current_date, '%Y-%m-%d 23:59:59') AS display_end,
-       FALSE as public_news,
+       'FALSE' as public_news,
    	 'news' as news_type
 
     
