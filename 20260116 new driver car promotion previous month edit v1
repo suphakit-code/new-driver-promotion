@@ -1,4 +1,7 @@
+
 DROP TEMPORARY TABLE car_driver ;
+
+
 CREATE TEMPORARY TABLE car_driver
 SELECT p.promo_id,
 	ROW_NUMBER() OVER(PARTITION BY d.skootar_id ORDER BY p.promo_id) AS promo_num,
@@ -39,10 +42,12 @@ WHERE p.start_date >= DATE_FORMAT(DATE_SUB(CURRENT_DATE(),INTERVAL 1 MONTH),'%Y-
 	AND s.`status` >-1
 GROUP BY p.promo_id,d.skootar_id ;
 
+
 SELECT *
 FROM car_driver;
 
 
+-- cut off expired send doc date
 SELECT m.promo_id,
 	m.skootar_id,
 	m.evidence_status,
@@ -59,6 +64,7 @@ WHERE m.evidence_status =10
 	AND m.bonus_status =1
 	AND m.expired_send_doc_date < CURRENT_DATE()
 	AND m.end_promo_date < CURRENT_DATE() ;
+
 
 -- add bonus
 SELECT m.promo_id,
@@ -86,12 +92,37 @@ WHERE m.bonus_status =1
 	AND m.end_promo_date < CURRENT_DATE() ;
 
 
+/*-- check update drivers promotion detail
+SELECT *
+-- 	d.promo_id,
+-- 	d.skootar_id,
+--    d.end_datetime
+FROM tbl_driver_promotion_detail d
+-- LEFT JOIN tbl_skootar_evidence e ON d.skootar_id = e.skootar_id
+-- LEFT JOIN tbl_driver_registration_offline r ON e.offline_id =r.id
+WHERE promo_id BETWEEN 2905 AND 2909
+ORDER BY d.skootar_id, promo_id;
+
+
+-- recheck add bonus
+SELECT
+    created_datetime,
+    trans_type,
+    remark,
+    skootar_id,
+    adjust_deposit,
+    created_by
+FROM tbl_driver_transaction s
+WHERE DATE(s.created_datetime) = CURRENT_DATE()
+AND s.created_by ='Top'
+ORDER BY s.created_datetime DESC
+LIMIT 15;*/
+
+
+-- noti add bonus
 SELECT m.skootar_id,
 	s.onesignal_id,
 	'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_th,
-	'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_en,
-   
-'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_th,
 	'💸สรุปโปรฯ ยิ่งวิ่ง ยิ่งได้ โบนัส 5 ต่อ' AS heading_en,
 
 
@@ -99,8 +130,8 @@ SELECT m.skootar_id,
 	  '<br/>ต่อที่ 1 วิ่งไป ',MAX(CASE WHEN m.promo_num = 1 THEN m.total_order END), ' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 1 THEN m.total_bonus END) ,' บาท', 
 	  '<br/>ต่อที่ 2 วิ่งไป ',MAX(CASE WHEN m.promo_num = 2 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 2 THEN m.total_bonus END) ,' บาท',
 	  '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END) ,' บาท',
-      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
-      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
+      '<br/>ต่อที่ 4 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
+      '<br/>ต่อที่ 5 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
 	  '<br/>รวมได้ทั้งหมด ', SUM(m.total_bonus),' บาท'
 	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_th,
 	  
@@ -109,8 +140,8 @@ SELECT m.skootar_id,
 	  '<br/>ต่อที่ 1 วิ่งไป ',MAX(CASE WHEN m.promo_num = 1 THEN m.total_order END), ' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 1 THEN m.total_bonus END) ,' บาท', 
 	  '<br/>ต่อที่ 2 วิ่งไป ',MAX(CASE WHEN m.promo_num = 2 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 2 THEN m.total_bonus END) ,' บาท',
 	  '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 3 THEN m.total_bonus END) ,' บาท',
-      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
-      '<br/>ต่อที่ 3 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
+      '<br/>ต่อที่ 4 วิ่งไป ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 4 THEN m.total_bonus END) ,' บาท',
+      '<br/>ต่อที่ 5 วิ่งไป ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_order END),' งาน ได้โบนัส ', MAX(CASE WHEN m.promo_num = 5 THEN m.total_bonus END) ,' บาท', 
 	  '<br/>รวมได้ทั้งหมด ', SUM(m.total_bonus),' บาท'
 	  '<br/>อัพเดทข้อมูล ณ วันที่',DATE_FORMAT(now(), '%d/%m/%Y %H:%i')) AS contents_en,
    
@@ -120,9 +151,9 @@ SELECT m.skootar_id,
    '' AS url,
 		  
 
-    	 TRUE as display_in_news,
+    	 'TRUE' as display_in_news,
        date_format(current_date, '%Y-%m-%d 23:59:59') AS display_end,
-       FALSE as public_news,
+       'FALSE' as public_news,
    	 'news' as news_type
 
     
